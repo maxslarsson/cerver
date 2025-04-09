@@ -1,13 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <errno.h>
 
+#include "client_handler.h"
+
 #define LISTEN_BACKLOG 12
 
+// TODO: Close child processes when parent exits (e.g. gets Control-C)
 int main(void) {
     struct addrinfo hints;
     hints.ai_family = AF_UNSPEC;
@@ -32,6 +36,8 @@ int main(void) {
         exit(1);
     }
 
+    freeaddrinfo(res);
+
     int yes = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
         fprintf(stderr, "setsockopt error: %s\n", strerror(errno));
@@ -45,16 +51,28 @@ int main(void) {
 
     printf("Listening on port 3000\n");
 
-    struct sockaddr_storage clientaddr;
-    socklen_t clientaddr_len = sizeof(clientaddr);
-    int clientfd = accept(sockfd, (struct sockaddr *)&clientaddr, &clientaddr_len);
-    if (clientfd == -1) {
-        fprintf(stderr, "accept error: %s\n", strerror(errno));
-        exit(1);
+    while (1) {
+        struct sockaddr_storage clientaddr;
+        socklen_t clientaddr_len = sizeof(clientaddr);
+        int clientfd = accept(sockfd, (struct sockaddr *)&clientaddr, &clientaddr_len);
+        if (clientfd == -1) {
+            fprintf(stderr, "accept error: %s\n", strerror(errno));
+            exit(1);
+        }
+
+        int pid = fork();
+        if (pid == 0) {
+            // Child
+            handle_client(clientfd);
+        } else if (pid > 0) {
+            // Parent
+            printf("New client made with fd: %d\n", clientfd);
+        } else {
+            // Error
+            fprintf(stderr, "fork error: %s\n", strerror(errno));
+            exit(1);
+        }
     }
 
-    printf("Connection made with fd: %d\n", clientfd);
-
-    freeaddrinfo(res);
     return 0;
 }
