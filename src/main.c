@@ -97,6 +97,8 @@ int main(void) {
             // Child
             close(sockfd);
             handle_client(clientfd);
+            close(clientfd);
+            exit(0);
         } else if (pid > 0) {
             // Parent
             close(clientfd);
